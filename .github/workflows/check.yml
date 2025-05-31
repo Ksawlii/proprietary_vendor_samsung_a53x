@@ -12,8 +12,8 @@ jobs:
       matrix:
         include:
           - model: "SM-A536E"
-            csc: "ZTO"
-            omc: "ZTO"
+            csc: "TPA"
+            omc: "TPA"
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
