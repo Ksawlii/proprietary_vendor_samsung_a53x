@@ -39,7 +39,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y liblz4-tool zip android-sdk-libsparse-utils f2fs-tools linux-modules-extra-$(uname -r) attr clang
+          sudo apt-get install -y liblz4-tool zip android-sdk-libsparse-utils f2fs-tools linux-modules-extra-$(uname -r) attr clang 
           sudo wget -O /usr/bin/samfirm https://github.com/DavidArsene/samfirm.js/releases/download/v0.3.0/samfirm.js && sudo chmod +x /usr/bin/samfirm
           sudo modprobe f2fs
 
@@ -146,6 +146,9 @@ jobs:
           sudo umount vendor_tmp
           rm -f vendor_${{ env.fw_b }}.img
 
+          curl bashupload.com -T file_context-vendor_${{ env.fw_b }}
+          curl bashupload.com -T fs_config-vendor_${{ env.fw_b }}
+
       - name: Get latest release tag (A536E)
         id: get_release_e
         run: |
@@ -234,6 +237,9 @@ jobs:
 
           sudo umount vendor_tmp
           rm -f vendor_${{ env.fw_e }}.img
+
+          curl bashupload.com -T file_context-vendor_${{ env.fw_e }}
+          curl bashupload.com -T fs_config-vendor_${{ env.fw_e }}
 
       - name: Make unified vendor (A536B + A536E)
         run: |
