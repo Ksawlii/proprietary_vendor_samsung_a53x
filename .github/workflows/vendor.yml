@@ -1,0 +1,431 @@
+name: Make unified vendor
+
+on:
+  workflow_dispatch:
+
+jobs:
+  check_release:
+    runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - model_e: "SM-A536E"
+            csc_e: "TPA"
+            omc_e: "TPA"
+            imei_e: "357518816398424"
+            model_b: "SM-A536B"
+            csc_b: "EUX"
+            omc_b: "EUX"
+            imei_b: "350498057492003"
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 'latest'
+
+      - name: Set up Python 3
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y liblz4-tool zip android-sdk-libsparse-utils f2fs-tools linux-modules-extra-$(uname -r)
+          sudo wget -O /usr/bin/samfirm https://github.com/DavidArsene/samfirm.js/releases/download/v0.3.0/samfirm.js && sudo chmod +x /usr/bin/samfirm
+          sudo modprobe f2fs
+
+      - name: Setup Git
+        run: |
+          git config --local user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config --local user.name "github-actions[bot]"
+
+      - name: Cleanup space
+        if: env.need_update == 1
+        run: |
+          sudo apt-get remove --purge -y "php*" "dotnet*" "mysql*" "clang*" "google*"
+          sudo apt-get autoremove -y
+          sudo apt-get clean
+          sudo rm -rf /usr/local
+
+      - name: Get latest release tag (A536B)
+        run: |
+          latest_release=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases" |
+              jq -r '
+              .[] |
+              select(.tag_name | test("A536B")) |
+              .tag_name
+              ' |
+              head -n1 | cut -d'_' -f1)
+
+          echo "release_tag_b=$latest_release" >> "$GITHUB_OUTPUT"
+
+      - name: Check if the release on GitHub has latest vendor (A536B)
+        run: |
+          if [ -f current.${{ matrix.model_b }}_${{ matrix.omc_b }}) ]; then
+              tag="${{ steps.get_release.outputs.release_tag_b }}"
+              fw_b="$(cat current.${{ matrix.model_b }}_${{ matrix.omc_b }})"
+              match=false
+
+              while read -r keyword; do
+                  prefix="${keyword%%/*}"
+    
+                  if [[ "$tag" == *"$prefix"* ]]; then
+                      match=true
+                      break
+                  fi
+              done < "$fw_b"
+          else
+              match=false
+          fi
+
+          echo "match_b=$match" >> "$GITHUB_OUTPUT"
+
+      - name: Get vendor from GitHub Releases (A536B)
+        if: steps.check_keywords.outputs.match_b == 'true'
+        run: |
+          echo "fw_b=$(cat current.${{ matrix.model_b }}_${{ matrix.omc_b }})" >> $GITHUB_ENV
+          vendor="https://github.com/${{ github.repository }}/releases/${{ fw_b }}_vendor.zip"
+
+          wget "$vendor"
+          unzip ${{ env.fw_b }}_vendor.zip
+          rm -f ${{ env.fw_b }}_vendor.zip
+          mv vendor.img vendor_${{ env.fw_b }}.img
+
+      - name: Get vendor from stock firmware (A536B)
+        if: steps.check_keywords.outputs.match_b == 'false'
+        run: |
+          samfirm -m ${{ matrix.model_b }} -r ${{ matrix.csc_b }} -i ${{ matrixx.imei_b }}
+          ap_tar_b=$(find -name "AP*")
+          echo "ap_tar_b=$ap_tar_b" >> $GITHUB_ENV
+
+          fw=$(echo "$ap_tar_b" | cut -d'_' -f3)
+          echo "fw_b=$fw" >> $GITHUB_ENV
+
+          tar xvf ${{ env.ap_tar_b }} super.img.lz4
+          rm -f ${{ env.ap_tar_b }}
+          lz4 -d super.img.lz4 super.img
+          rm -f super.img.lz4
+          simg2img super.img super_raw.img
+          rm -f super.img
+          mv -f super_raw.img super.img
+          ./bin/lpunpack -p vendor super.img .
+          rm -f super.img
+          mv -f vendor.img vendor_${{ env.fw_b }}.img
+
+      - name: Extract vendor (A536B)
+        run: |
+          mkdir -p vendor_tmp
+          sudo mount -o ro vendor_${{ env.fw_b }}.img vendor_tmp
+          sudo cp -rfa -T vendor_tmp vendor_${{ env.fw_b }}
+          sudo chown -hR "$(whoami):$(whoami)" vendor_${{ env.fw_b }}
+
+          sudo find vendor_tmp | sudo xargs -I "{}" -P $(nproc --all) stat -c "%n %u %g %a capabilities=0x0" "{}" > "fs_config-vendor_${{ env.fw_b }}"
+          sudo find vendor_tmp | sudo xargs -I "{}" -P $(nproc --all) sh -c 'echo "$1 $(getfattr -n security.selinux --only-values -h --absolute-names "$1")"' "sh" "{}" > "file_context-vendor_${{ env.fw_b }}"
+
+          sed -i "s|vendor_tmp|/vendor|g" "file_context-vendor_$${{ env.fw_b }}"
+          sed -i -e "s|vendor_tmp | |g" -e "s|vendor_tmp|vendor|g" "fs_config-vendor_${{ env.fw_b }}"
+          sed -i -e "s|\.|\\\.|g" -e "s|\+|\\\+|g" -e "s|\[|\\\[|g" -e "s|\]|\\\]|g" -e "s|\*|\\\*|g" "file_context-vendor_${{ env.fw_b }}"
+
+          sudo umount vendor_tmp
+          rm -f vendor_${{ env.fw_b }}.img
+
+      - name: Get latest release tag (A536E)
+        run: |
+          latest_release=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases" |
+              jq -r '
+              .[] |
+              select(.tag_name | test("A536E")) |
+              .tag_name
+              ' |
+              head -n1 | cut -d'_' -f1)
+
+          echo "release_tag_e=$latest_release" >> "$GITHUB_OUTPUT"
+
+      - name: Check if the release on GitHub has latest vendor (A536E)
+        run: |
+          if [ -f current.${{ matrix.model_e }}_${{ matrix.omc_e }}) ]; then
+              tag="${{ steps.get_release.outputs.release_tag_e }}"
+              fw_b="$(cat current.${{ matrix.model_e }}_${{ matrix.omc_e }})"
+              match=false
+
+              while read -r keyword; do
+                  prefix="${keyword%%/*}"
+    
+                  if [[ "$tag" == *"$prefix"* ]]; then
+                      match=true
+                      break
+                  fi
+              done < "$fw_e"
+          else
+              match=false
+          fi
+
+          echo "match_e=$match" >> "$GITHUB_OUTPUT"
+
+      - name: Get vendor from GitHub Releases (A536E)
+        if: steps.check_keywords.outputs.match_e == 'true'
+        run: |
+          echo "fw_e=$(cat current.${{ matrix.model_e }}_${{ matrix.omc_e }})" >> $GITHUB_ENV
+          vendor="https://github.com/${{ github.repository }}/releases/${{ env.fw_e }}_vendor.zip"
+
+          wget "$vendor"
+          unzip ${{ env.fw_e }}_vendor.zip
+          rm -rf ${{ env.fw_e }}_vendor.zip
+          mv -f vendor.img vendor_${{ env.fw_e }}.img
+
+      - name: Get vendor from stock firmware (A536E)
+        if: steps.check_keywords.outputs.match_e == 'false'
+        run: |
+          samfirm -m ${{ matrix.model_e }} -r ${{ matrix.csc_e }} -i ${{ matrixx.imei_e }}
+          ap_tar_e=$(find -name "AP*")
+          echo "ap_tar_e=$ap_tar_e" >> $GITHUB_ENV
+
+          fw=$(echo "$ap_tar_e" | cut -d'_' -f3)
+          echo "fw_e=$fw" >> $GITHUB_ENV
+
+          tar xvf ${{ env.ap_tar_e }} super.img.lz4
+          rm -f ${{ env.ap_tar_e }}
+          lz4 -d super.img.lz4 super.img
+          rm -f super.img.lz4
+          simg2img super.img super_raw.img
+          rm -f super.img
+          mv -f super_raw.img super.img
+          ./bin/lpunpack -p vendor super.img .
+          rm -f super.img
+          mv vendor.img vendor_${{ env.fw_e }}.img
+
+      - name: Extract vendor (A536E)
+        run: |
+          mkdir -p vendor_tmp
+          sudo mount -o ro vendor_${{ env.fw_e }}.img vendor_tmp
+          sudo cp -rfa -T vendor_tmp vendor_${{ env.fw_e }}
+          sudo chown -hR "$(whoami):$(whoami)" vendor_${{ env.fw_e }}
+
+          sudo find vendor_tmp | sudo xargs -I "{}" -P $(nproc --all) stat -c "%n %u %g %a capabilities=0x0" "{}" > "fs_config-vendor_${{ env.fw_e }}"
+          sudo find vendor_tmp | sudo xargs -I "{}" -P $(nproc --all) sh -c 'echo "$1 $(getfattr -n security.selinux --only-values -h --absolute-names "$1")"' "sh" "{}" > "file_context-vendor_${{ env.fw_e }}"
+
+          sed -i "s|vendor_tmp|/vendor|g" "file_context-vendor_$${{ env.fw_e }}"
+          sed -i -e "s|vendor_tmp | |g" -e "s|vendor_tmp|vendor|g" "fs_config-vendor_${{ env.fw_e }}"
+          sed -i -e "s|\.|\\\.|g" -e "s|\+|\\\+|g" -e "s|\[|\\\[|g" -e "s|\]|\\\]|g" -e "s|\*|\\\*|g" "file_context-vendor_${{ env.fw_e }}"
+
+          sudo umount vendor_tmp
+          rm -f vendor_${{ env.fw_e }}.img
+
+      - name: Make unified vendor (A536B + A536E)
+        run: |
+          cd vendor_${{ env.fw_b }}
+          mv -f tee tee_eur
+          cp -rfa ../vendor_${{ env.fw_e }}/tee tee_cis
+          mkdir tee
+
+          cd firmware
+          mkdir -p eur
+          mv -f AP_AUDIO_SLSI.bin eur/AP_AUDIO_SLSI.bin
+          mv -f APDV_AUDIO_SLSI.bin eur/APDV_AUDIO_SLSI.bin
+          mv -f calliope_sram.bin eur/calliope_sram.bin
+          mv -f mfc_fw.bin eur/mfc_fw.bin
+          mv -f os.checked.bin eur/os.checked.bin
+          mv -f NPU.bin eur/NPU.bin
+          mv -f vts.bin eur/vts.bin
+          touch AP_AUDIO_SLSI.bin
+          touch APDV_AUDIO_SLSI.bin
+          touch calliope_sram.bin
+          touch mfc_fw.bin
+          touch os.checked.bin
+          touch NPU.bin
+          touch vts.bin
+
+          mkdir -p cis
+          cp -rfa ../../vendor_${{ env.fw_e }}/firmware/AP_AUDIO_SLSI.bin cis/AP_AUDIO_SLSI.bin
+          cp -rfa ../../vendor_${{ env.fw_e }}/firmware/APDV_AUDIO_SLSI.bin cis/APDV_AUDIO_SLSI.bin
+          cp -rfa ../../vendor_${{ env.fw_e }}/firmware/calliope_sram.bin cis/calliope_sram.bin
+          cp -rfa ../../vendor_${{ env.fw_e }}/firmware/mfc_fw.bin cis/mfc_fw.bin
+          cp -rfa ../../vendor_${{ env.fw_e }}/firmware/os.checked.bin cis/os.checked.bin
+          cp -rfa ../../vendor_${{ env.fw_e }}/firmware/NPU.bin cis/NPU.bin
+          cp -rfa ../../vendor_${{ env.fw_e }}/firmware/vts.bin cis/vts.bin
+
+          cd ../
+          {
+              echo "on early-fs && property:ro.boot.em.model=SM-A536B"
+              echo "mount none /vendor/firmware/eur/AP_AUDIO_SLSI.bin /vendor/firmware/AP_AUDIO_SLSI.bin bind"
+              echo "mount none /vendor/firmware/eur/APDV_AUDIO_SLSI.bin /vendor/firmware/APDV_AUDIO_SLSI.bin bind"
+              echo "mount none /vendor/firmware/eur/calliope_sram.bin /vendor/firmware/calliope_sram.bin bind"
+              echo "mount none /vendor/firmware/eur/mfc_fw.bin /vendor/firmware/mfc_fw.bin bind"
+              echo "mount none /vendor/firmware/eur/NPU.bin /vendor/firmware/NPU.bin bind"
+              echo "mount none /vendor/firmware/eur/os.checked.bin /vendor/firmware/os.checked.bin bind"
+              echo "mount none /vendor/firmware/eur/vts.bin /vendor/firmware/vts.bin bind"
+              echo "mount none /vendor/tee_eur /vendor/tee bind"
+          } >> "etc/init/unify.rc"
+
+          {
+              echo "on early-fs && property:ro.boot.em.model=SM-A536E"
+              echo "mount none /vendor/firmware/cis/AP_AUDIO_SLSI.bin /vendor/firmware/AP_AUDIO_SLSI.bin bind"
+              echo "mount none /vendor/firmware/cis/APDV_AUDIO_SLSI.bin /vendor/firmware/APDV_AUDIO_SLSI.bin bind"
+              echo "mount none /vendor/firmware/cis/calliope_sram.bin /vendor/firmware/calliope_sram.bin bind"
+              echo "mount none /vendor/firmware/cis/mfc_fw.bin /vendor/firmware/mfc_fw.bin bind"
+              echo "mount none /vendor/firmware/cis/NPU.bin /vendor/firmware/NPU.bin bind"
+              echo "mount none /vendor/firmware/cis/os.checked.bin /vendor/firmware/os.checked.bin bind"
+              echo "mount none /vendor/firmware/cis/vts.bin /vendor/firmware/vts.bin bind"
+              echo "mount none /vendor/tee_cis /vendor/tee bind"
+          } >> "etc/init/unify.rc"
+
+          {
+              echo "(allow init_31_0 tee_file (dir (mounton)))"
+              echo "(allow priv_app_31_0 tee_file (dir (getattr)))"
+              echo "(allow init_31_0 vendor_fw_file (file (mounton)))"
+              echo "(allow priv_app_31_0 vendor_fw_file (file (getattr)))"
+              echo "(allow init_31_0 vendor_npu_firmware_file (file (mounton)))"
+              echo "(allow priv_app_31_0 vendor_npu_firmware_file (file (getattr)))"
+          } >> etc/selinux/vendor_sepolicy.cil
+
+          cd ../
+          {
+              echo "/vendor/firmware/eur u:object_r:vendor_fw_file:s0"
+              echo "/vendor/firmware/eur/AP_AUDIO_SLSI\.bin u:object_r:vendor_fw_file:s0"
+              echo "/vendor/firmware/eur/APDV_AUDIO_SLSI\.bin u:object_r:vendor_fw_file:s0"
+              echo "/vendor/firmware/eur/calliope_sram\.bin u:object_r:vendor_fw_file:s0"
+              echo "/vendor/firmware/eur/mfc_fw\.bin u:object_r:vendor_fw_file:s0"
+              echo "/vendor/firmware/eur/NPU\.bin u:object_r:vendor_npu_firmware_file:s0"
+              echo "/vendor/firmware/eur/os.checked\.bin u:object_r:vendor_fw_file:s0"
+              echo "/vendor/firmware/eur/vts\.bin u:object_r:vendor_fw_file:s0"
+          } >> "file_context-vendor_${{ env.fw_b }}"
+
+          {
+              echo "vendor/firmware/eur 0 2000 755 capabilities=0x0"
+              echo "vendor/firmware/eur/AP_AUDIO_SLSI.bin 0 0 644 capabilities=0x0"
+              echo "vendor/firmware/eur/APDV_AUDIO_SLSI.bin 0 0 644 capabilities=0x0"
+              echo "vendor/firmware/eur/calliope_sram.bin 0 0 644 capabilities=0x0"
+              echo "vendor/firmware/eur/mfc_fw.bin 0 0 644 capabilities=0x0"
+              echo "vendor/firmware/eur/NPU.bin 0 0 644 capabilities=0x0"
+              echo "vendor/firmware/eur/os.checked.bin 0 0 644 capabilities=0x0"
+              echo "vendor/firmware/eur/vts.bin 0 0 644 capabilities=0x0"
+          } >> "fs_config-vendor_${{ env.fw_b }}"
+
+          {
+              echo "/vendor/firmware/cis u:object_r:vendor_fw_file:s0"
+              echo "/vendor/firmware/cis/AP_AUDIO_SLSI\.bin u:object_r:vendor_fw_file:s0"
+              echo "/vendor/firmware/cis/APDV_AUDIO_SLSI\.bin u:object_r:vendor_fw_file:s0"
+              echo "/vendor/firmware/cis/calliope_sram\.bin u:object_r:vendor_fw_file:s0"
+              echo "/vendor/firmware/cis/mfc_fw\.bin u:object_r:vendor_fw_file:s0"
+              echo "/vendor/firmware/cis/NPU\.bin u:object_r:vendor_npu_firmware_file:s0"
+              echo "/vendor/firmware/cis/os.checked\.bin u:object_r:vendor_fw_file:s0"
+              echo "/vendor/firmware/cis/vts\.bin u:object_r:vendor_fw_file:s0"
+          } >> "file_context-vendor_${{ env.fw_b }}"
+
+          {
+              echo "vendor/firmware/cis 0 2000 755 capabilities=0x0"
+              echo "vendor/firmware/cis/AP_AUDIO_SLSI.bin 0 0 644 capabilities=0x0"
+              echo "vendor/firmware/cis/APDV_AUDIO_SLSI.bin 0 0 644 capabilities=0x0"
+              echo "vendor/firmware/cis/calliope_sram.bin 0 0 644 capabilities=0x0"
+              echo "vendor/firmware/cis/mfc_fw.bin 0 0 644 capabilities=0x0"
+              echo "vendor/firmware/cis/NPU.bin 0 0 644 capabilities=0x0"
+              echo "vendor/firmware/cis/os.checked.bin 0 0 644 capabilities=0x0"
+              echo "vendor/firmware/cis/vts.bin 0 0 644 capabilities=0x0"
+          } >> "fs_config-vendor_${{ env.fw_b }}"
+
+          {
+              echo "/vendor/etc/init/unify\.rc u:object_r:vendor_configs_file:s0"
+              echo "/vendor/tee u:object_r:tee_file:s0"
+          } >> "file_context-vendor_${{ env.fw_b }}"
+
+          {
+              echo "vendor/etc/init/unify.rc 0 0 644 capabilities=0x0"
+              echo "vendor/tee 0 2000 755 capabilities=0x0"
+          } >> "fs_config-vendor_${{ env.fw_b }}"
+
+          sed -i "s./vendor/tee./vendor/tee_eur.g" "file_context-vendor_${{ env.fw_b }}"
+          echo "/vendor/tee u:object_r:tee_file:s0" >> "file_context-vendor_${{ env.fw_b }}"
+
+          sed -i "s.vendor/tee.vendor/tee_eur.g" "fs_config-vendor_${{ env.fw_b }}"
+          echo "vendor/tee 0 2000 755 capabilities=0x0" >> "fs_config-vendor_${{ env.fw_b }}"
+
+          TEE_BLOBS="
+          00000000-0000-0000-0000-000000010081
+          00000000-0000-0000-0000-000000020081
+          00000000-0000-0000-0000-000000534b4d
+          00000000-0000-0000-0000-000048444350
+          00000000-0000-0000-0000-0000534b504d
+          00000000-0000-0000-0000-0050524f4341
+          00000000-0000-0000-0000-0053545354ab
+          00000000-0000-0000-0000-00575644524d
+          00000000-0000-0000-0000-42494f535542
+          00000000-0000-0000-0000-46494e474502
+          00000000-0000-0000-0000-4662436b6d52
+          00000000-0000-0000-0000-474154454b45
+          00000000-0000-0000-0000-4b45594d5354
+          00000000-0000-0000-0000-4d5053545549
+          00000000-0000-0000-0000-4d704e434954
+          00000000-0000-0000-0000-4d70536b566e
+          00000000-0000-0000-0000-4d7073534d43
+          00000000-0000-0000-0000-4d7073617574
+          00000000-0000-0000-0000-505256544545
+          00000000-0000-0000-0000-5345435f4652
+          00000000-0000-0000-0000-54412d48444d
+          00000000-0000-0000-0000-544545535355
+          00000000-0000-0000-0000-54496473706c
+          00000000-0000-0000-0000-544974684c6c
+          00000000-0000-0000-0000-564c544b5052
+          00000000-0000-0000-0000-656e676d6f64
+          00000000-0000-0000-0000-657365636f6d
+          00000000-0000-0000-0000-6b6e78677564
+          00000000-0000-0000-0000-6d706f667376
+          00000000-0000-0000-0000-6d73745f5441
+          "
+
+          {
+              echo "/vendor/tee_cis u:object_r:tee_file:s0"
+              for b in "$TEE_BLOBS"; do
+                  echo "/vendor/tee_cis/$b u:object_r:tee_file:s0"
+              done
+              echo "/vendor/tee_cis/driver u:object_r:tee_file:s0"
+              echo "/vendor/tee_cis/driver/00000000-0000-0000-0000-494363447256 u:object_r:tee_file:s0"
+              echo "/vendor/tee_cis/driver/00000000-0000-0000-0000-4d53546d7374 u:object_r:tee_file:s0"
+              echo "/vendor/tee_cis/driver/00000000-0000-0000-0000-53626f786476 u:object_r:tee_file:s0"
+              echo "/vendor/tee_cis/driver/00000000-0000-0000-0000-564c544b4456 u:object_r:tee_file:s0"
+              echo "/vendor/tee_cis/ffffffff-0000-0000-0000-000000000030 u:object_r:tee_file:s0"
+              echo "/vendor/tee_cis/tui u:object_r:tee_file:s0"
+              echo "/vendor/tee_cis/tui/resolution_common u:object_r:tee_file:s0"
+              echo "/vendor/tee_cis/tui/resolution_common/ID00000100 u:object_r:tee_file:s0"
+          } >> "file_context-vendor_${{ env.fw_b }}"
+
+          {
+              echo "vendor/tee_cis 0 2000 755 capabilities=0x0"
+              for b in "$TEE_BLOBS"; do
+                  echo "vendor/tee_cis/$b 0 0 644 capabilities=0x0"
+              done
+              echo "vendor/tee_cis/driver 0 2000 755 capabilities=0x0"
+              echo "vendor/tee_cis/driver/00000000-0000-0000-0000-494363447256 0 0 644 capabilities=0x0"
+              echo "vendor/tee_cis/driver/00000000-0000-0000-0000-4d53546d7374 0 0 644 capabilities=0x0"
+              echo "vendor/tee_cis/driver/00000000-0000-0000-0000-53626f786476 0 0 644 capabilities=0x0"
+              echo "vendor/tee_cis/driver/00000000-0000-0000-0000-564c544b4456 0 0 644 capabilities=0x0"
+              echo "vendor/tee_cis/ffffffff-0000-0000-0000-000000000030 0 0 644 capabilities=0x0"
+              echo "vendor/tee_cis/tui 0 2000 755 capabilities=0x0"
+              echo "vendor/tee_cis/tui/resolution_common 0 2000 755 capabilities=0x0"
+              echo "vendor/tee_cis/tui/resolution_common/ID00000100 0 0 644 capabilities=0x0"
+          } >> "fs_config-vendor_${{ env.fw_b }}"
+
+      - name: Build vendor image (A536B + A536E)
+        run: |
+            mkfs.erofs -zlz4hc,9 -b 4096 --mount-point="vendor" \
+                --fs-config-file="fs_config-vendor_${{ env.fw_b }}" --file-contexts="file_context-vendor_${{ env.fw_b }}" -T 1640995200 \
+                "vendor.img" "vendor_${{ env.fw_b }}"
+            zip -r0 --store vendor-${{ env.fw_b }}_${{ env.fw_e }} vendor.img
+
+      - name: Upload vendor image (A536B + A536E)
+        uses: softprops/action-gh-release@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: "${{ env.fw_b }}_${{ env.fw_e }}_vendor"
+          name: "${{ env.fw_b }} + ${{ env.fw_e }} - vendor"
+          files: |
+            vendor.img
