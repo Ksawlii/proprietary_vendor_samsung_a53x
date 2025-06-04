@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 jobs:
-  check_release:
+  make_vendor:
     runs-on: ubuntu-latest
 
     strategy:
@@ -49,7 +49,6 @@ jobs:
           git config --local user.name "github-actions[bot]"
 
       - name: Cleanup space
-        if: env.need_update == 1
         run: |
           sudo apt-get remove --purge -y "php*" "dotnet*" "mysql*" "clang*" "google*"
           sudo apt-get autoremove -y
@@ -57,6 +56,7 @@ jobs:
           sudo rm -rf /usr/local
 
       - name: Get latest release tag (A536B)
+        id: get_release_b
         run: |
           latest_release=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases" |
               jq -r '
@@ -69,9 +69,10 @@ jobs:
           echo "release_tag_b=$latest_release" >> "$GITHUB_OUTPUT"
 
       - name: Check if the release on GitHub has latest vendor (A536B)
+        id: check_keywords_b
         run: |
-          if [ -f current.${{ matrix.model_b }}_${{ matrix.omc_b }}) ]; then
-              tag="${{ steps.get_release.outputs.release_tag_b }}"
+          if [ -f "current.${{ matrix.model_b }}_${{ matrix.omc_b }}" ]; then
+              tag="${{ steps.get_release_b.outputs.release_tag_b }}"
               fw_b="$(cat current.${{ matrix.model_b }}_${{ matrix.omc_b }})"
               match=false
 
@@ -90,20 +91,20 @@ jobs:
           echo "match_b=$match" >> "$GITHUB_OUTPUT"
 
       - name: Get vendor from GitHub Releases (A536B)
-        if: steps.check_keywords.outputs.match_b == 'true'
+        if: steps.check_keywords_b.outputs.match_b == 'true'
         run: |
           echo "fw_b=$(cat current.${{ matrix.model_b }}_${{ matrix.omc_b }})" >> $GITHUB_ENV
-          vendor="https://github.com/${{ github.repository }}/releases/${{ fw_b }}_vendor.zip"
+          vendor="https://github.com/${{ github.repository }}/releases/${{ env.fw_b }}_vendor.zip
 
           wget "$vendor"
-          unzip ${{ env.fw_b }}_vendor.zip
-          rm -f ${{ env.fw_b }}_vendor.zip
-          mv vendor.img vendor_${{ env.fw_b }}.img
+          unzip "${{ env.fw_b }}_vendor.zip"
+          rm -f "${{ env.fw_b }}_vendor.zip"
+          mv vendor.img "vendor_${{ env.fw_b }}.img"
 
       - name: Get vendor from stock firmware (A536B)
-        if: steps.check_keywords.outputs.match_b == 'false'
+        if: steps.check_keywords_b.outputs.match_b == 'false'
         run: |
-          samfirm -m ${{ matrix.model_b }} -r ${{ matrix.csc_b }} -i ${{ matrixx.imei_b }}
+          samfirm -m ${{ matrix.model_b }} -r ${{ matrix.csc_b }} -i ${{ matrix.imei_b }}
           ap_tar_b=$(find -name "AP*")
           echo "ap_tar_b=$ap_tar_b" >> $GITHUB_ENV
 
@@ -131,7 +132,7 @@ jobs:
           sudo find vendor_tmp | sudo xargs -I "{}" -P $(nproc --all) stat -c "%n %u %g %a capabilities=0x0" "{}" > "fs_config-vendor_${{ env.fw_b }}"
           sudo find vendor_tmp | sudo xargs -I "{}" -P $(nproc --all) sh -c 'echo "$1 $(getfattr -n security.selinux --only-values -h --absolute-names "$1")"' "sh" "{}" > "file_context-vendor_${{ env.fw_b }}"
 
-          sed -i "s|vendor_tmp|/vendor|g" "file_context-vendor_$${{ env.fw_b }}"
+          sed -i "s|vendor_tmp|/vendor|g" "file_context-vendor_${{ env.fw_b }}"
           sed -i -e "s|vendor_tmp | |g" -e "s|vendor_tmp|vendor|g" "fs_config-vendor_${{ env.fw_b }}"
           sed -i -e "s|\.|\\\.|g" -e "s|\+|\\\+|g" -e "s|\[|\\\[|g" -e "s|\]|\\\]|g" -e "s|\*|\\\*|g" "file_context-vendor_${{ env.fw_b }}"
 
@@ -139,6 +140,7 @@ jobs:
           rm -f vendor_${{ env.fw_b }}.img
 
       - name: Get latest release tag (A536E)
+        id: get_release_e
         run: |
           latest_release=$(curl -s "https://api.github.com/repos/${{ github.repository }}/releases" |
               jq -r '
@@ -151,9 +153,10 @@ jobs:
           echo "release_tag_e=$latest_release" >> "$GITHUB_OUTPUT"
 
       - name: Check if the release on GitHub has latest vendor (A536E)
+        id: check_keywords_e
         run: |
-          if [ -f current.${{ matrix.model_e }}_${{ matrix.omc_e }}) ]; then
-              tag="${{ steps.get_release.outputs.release_tag_e }}"
+          if [ -f "current.${{ matrix.model_e }}_${{ matrix.omc_e }}" ]; then
+              tag="${{ steps.get_release_e.outputs.release_tag_e }}"
               fw_b="$(cat current.${{ matrix.model_e }}_${{ matrix.omc_e }})"
               match=false
 
@@ -172,20 +175,20 @@ jobs:
           echo "match_e=$match" >> "$GITHUB_OUTPUT"
 
       - name: Get vendor from GitHub Releases (A536E)
-        if: steps.check_keywords.outputs.match_e == 'true'
+        if: steps.check_keywords_b.outputs.match_e == 'true'
         run: |
           echo "fw_e=$(cat current.${{ matrix.model_e }}_${{ matrix.omc_e }})" >> $GITHUB_ENV
-          vendor="https://github.com/${{ github.repository }}/releases/${{ env.fw_e }}_vendor.zip"
+          vendor="https://github.com/${{ github.repository }}/releases/${{ env.fw_e }}_vendor.zip
 
           wget "$vendor"
-          unzip ${{ env.fw_e }}_vendor.zip
-          rm -rf ${{ env.fw_e }}_vendor.zip
-          mv -f vendor.img vendor_${{ env.fw_e }}.img
+          unzip "${{ env.fw_e }}_vendor.zip"
+          rm -f "${{ env.fw_e }}_vendor.zip"
+          mv vendor.img "vendor_${{ env.fw_b }}.img"
 
       - name: Get vendor from stock firmware (A536E)
-        if: steps.check_keywords.outputs.match_e == 'false'
+        if: steps.check_keywords_b.outputs.match_e == 'false'
         run: |
-          samfirm -m ${{ matrix.model_e }} -r ${{ matrix.csc_e }} -i ${{ matrixx.imei_e }}
+          samfirm -m ${{ matrix.model_e }} -r ${{ matrix.csc_e }} -i ${{ matrix.imei_e }}
           ap_tar_e=$(find -name "AP*")
           echo "ap_tar_e=$ap_tar_e" >> $GITHUB_ENV
 
@@ -213,7 +216,7 @@ jobs:
           sudo find vendor_tmp | sudo xargs -I "{}" -P $(nproc --all) stat -c "%n %u %g %a capabilities=0x0" "{}" > "fs_config-vendor_${{ env.fw_e }}"
           sudo find vendor_tmp | sudo xargs -I "{}" -P $(nproc --all) sh -c 'echo "$1 $(getfattr -n security.selinux --only-values -h --absolute-names "$1")"' "sh" "{}" > "file_context-vendor_${{ env.fw_e }}"
 
-          sed -i "s|vendor_tmp|/vendor|g" "file_context-vendor_$${{ env.fw_e }}"
+          sed -i "s|vendor_tmp|/vendor|g" "file_context-vendor_${{ env.fw_e }}"
           sed -i -e "s|vendor_tmp | |g" -e "s|vendor_tmp|vendor|g" "fs_config-vendor_${{ env.fw_e }}"
           sed -i -e "s|\.|\\\.|g" -e "s|\+|\\\+|g" -e "s|\[|\\\[|g" -e "s|\]|\\\]|g" -e "s|\*|\\\*|g" "file_context-vendor_${{ env.fw_e }}"
 
