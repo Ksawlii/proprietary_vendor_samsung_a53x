@@ -39,7 +39,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y liblz4-tool zip android-sdk-libsparse-utils f2fs-tools linux-modules-extra-$(uname -r)
+          sudo apt-get install -y liblz4-tool zip android-sdk-libsparse-utils f2fs-tools linux-modules-extra-$(uname -r) attr
           sudo wget -O /usr/bin/samfirm https://github.com/DavidArsene/samfirm.js/releases/download/v0.3.0/samfirm.js && sudo chmod +x /usr/bin/samfirm
           sudo modprobe f2fs
 
@@ -93,10 +93,15 @@ jobs:
       - name: Get vendor from GitHub Releases (A536B)
         if: steps.check_keywords_b.outputs.match_b == 'true'
         run: |
-          echo "fw_b=$(cat current.${{ matrix.model_b }}_${{ matrix.omc_b }})" >> $GITHUB_ENV
-          vendor="https://github.com/${{ github.repository }}/releases/${{ env.fw_b }}_vendor.zip"
+          fw_b="$(cat current.${{ matrix.model_b }}_${{ matrix.omc_b }} | cut -d'/' -f1)"
+          echo "fw_b=$fw_b" >> $GITHUB_ENV
+          vendor="https://github.com/${{ github.repository }}/releases/download/${fw_b}_${{ matrix.csc_b }}/${fw_b}_vendor.zip"
 
           wget "$vendor"
+
+      - name: Extract vendor image from zip file (A536B)
+        if: steps.check_keywords_b.outputs.match_b == 'true'
+        run: |
           unzip "${{ env.fw_b }}_vendor.zip"
           rm -f "${{ env.fw_b }}_vendor.zip"
           mv vendor.img "vendor_${{ env.fw_b }}.img"
@@ -157,7 +162,7 @@ jobs:
         run: |
           if [ -f "current.${{ matrix.model_e }}_${{ matrix.omc_e }}" ]; then
               tag="${{ steps.get_release_e.outputs.release_tag_e }}"
-              fw_b="$(cat current.${{ matrix.model_e }}_${{ matrix.omc_e }})"
+              fw_e="$(cat current.${{ matrix.model_e }}_${{ matrix.omc_e }})"
               match=false
 
               IFS='/' read -ra keywords <<< "$fw_e"
@@ -175,15 +180,20 @@ jobs:
           echo "match_e=$match" >> "$GITHUB_OUTPUT"
 
       - name: Get vendor from GitHub Releases (A536E)
-        if: steps.check_keywords_b.outputs.match_e == 'true'
+        if: steps.check_keywords_e.outputs.match_e == 'true'
         run: |
-          echo "fw_e=$(cat current.${{ matrix.model_e }}_${{ matrix.omc_e }})" >> $GITHUB_ENV
-          vendor="https://github.com/${{ github.repository }}/releases/${{ env.fw_e }}_vendor.zip"
+          fw_e="$(cat current.${{ matrix.model_e }}_${{ matrix.omc_e }} | cut -d'/' -f1)"
+          echo "fw_e=$fw_e" >> $GITHUB_ENV
+          vendor="https://github.com/${{ github.repository }}/releases/download/${fw_e}_${{ matrix.csc_e }}/${fw_e}_vendor.zip"
 
           wget "$vendor"
+
+      - name: Extract vendor image from zip file (A536E)
+        if: steps.check_keywords_e.outputs.match_e == 'true'
+        run: |
           unzip "${{ env.fw_e }}_vendor.zip"
           rm -f "${{ env.fw_e }}_vendor.zip"
-          mv vendor.img "vendor_${{ env.fw_b }}.img"
+          mv vendor.img "vendor_${{ env.fw_e }}.img"
 
       - name: Get vendor from stock firmware (A536E)
         if: steps.check_keywords_b.outputs.match_e == 'false'
@@ -418,9 +428,7 @@ jobs:
 
       - name: Build vendor image (A536B + A536E)
         run: |
-            mkfs.erofs -zlz4hc,9 -b 4096 --mount-point="vendor" \
-                --fs-config-file="fs_config-vendor_${{ env.fw_b }}" --file-contexts="file_context-vendor_${{ env.fw_b }}" -T 1640995200 \
-                "vendor.img" "vendor_${{ env.fw_b }}"
+            mkfs.erofs -zlz4hc,9 -b 4096 --mount-point="vendor" --fs-config-file="fs_config-vendor_${{ env.fw_b }}" --file-contexts="file_context-vendor_${{ env.fw_b }}" -T 1640995200 "vendor.img" "vendor_${{ env.fw_b }}"
             zip -r0 --store vendor-${{ env.fw_b }}_${{ env.fw_e }} vendor.img
 
       - name: Upload vendor image (A536B + A536E)
