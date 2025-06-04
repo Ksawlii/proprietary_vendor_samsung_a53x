@@ -437,7 +437,7 @@ jobs:
       - name: Build vendor image (A536B + A536E)
         run: |
             ./bin/mkfs.erofs -zlz4hc,9 -b 4096 --mount-point="vendor" --fs-config-file="fs_config-vendor_${{ env.fw_b }}" --file-contexts="file_context-vendor_${{ env.fw_b }}" -T 1640995200 "vendor.img" "vendor_${{ env.fw_b }}"
-            zip -r0 --store vendor-${{ env.fw_b }}_${{ env.fw_e }} vendor.img
+            zip -r0 --store vendor-${{ env.fw_b }}_${{ env.fw_e }}.zip vendor.img
 
       - name: Upload vendor image (A536B + A536E)
         uses: softprops/action-gh-release@v2
@@ -447,4 +447,4 @@ jobs:
           tag_name: "${{ env.fw_b }}_${{ env.fw_e }}_vendor"
           name: "${{ env.fw_b }} + ${{ env.fw_e }} - vendor"
           files: |
-            vendor.img
+            vendor-${{ env.fw_b }}_${{ env.fw_e }}.zip
