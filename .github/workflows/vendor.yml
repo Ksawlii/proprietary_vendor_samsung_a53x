@@ -39,9 +39,18 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y liblz4-tool zip android-sdk-libsparse-utils f2fs-tools linux-modules-extra-$(uname -r) attr
+          sudo apt-get install -y liblz4-tool zip android-sdk-libsparse-utils f2fs-tools linux-modules-extra-$(uname -r) attr clang
           sudo wget -O /usr/bin/samfirm https://github.com/DavidArsene/samfirm.js/releases/download/v0.3.0/samfirm.js && sudo chmod +x /usr/bin/samfirm
           sudo modprobe f2fs
+
+      - name: Compile erofs-utils
+        run: |
+          git clone --depth=1 --recurse-submodules https://github.com/sekaiacg/erofs-utils.git
+          cd erofs-utils
+          cmake -S "build/cmake" -B "out" -DCMAKE_SYSTEM_NAME=$(uname -s) -DCMAKE_SYSTEM_PROCESSOR=$(uname -m) -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ -DRUN_ON_WSL="OFF" -DENABLE_FULL_LTO="ON" -DMAX_BLOCK_SIZE="4096"
+          make -C "out" -j"$(nproc)"
+          cd ../
+          cp -fa erofs-utils/out/erofs-tools/mkfs.erofs bin/mkfs.erofs
 
       - name: Setup Git
         run: |
@@ -428,7 +437,7 @@ jobs:
 
       - name: Build vendor image (A536B + A536E)
         run: |
-            mkfs.erofs -zlz4hc,9 -b 4096 --mount-point="vendor" --fs-config-file="fs_config-vendor_${{ env.fw_b }}" --file-contexts="file_context-vendor_${{ env.fw_b }}" -T 1640995200 "vendor.img" "vendor_${{ env.fw_b }}"
+            ./bin/mkfs.erofs -zlz4hc,9 -b 4096 --mount-point="vendor" --fs-config-file="fs_config-vendor_${{ env.fw_b }}" --file-contexts="file_context-vendor_${{ env.fw_b }}" -T 1640995200 "vendor.img" "vendor_${{ env.fw_b }}"
             zip -r0 --store vendor-${{ env.fw_b }}_${{ env.fw_e }} vendor.img
 
       - name: Upload vendor image (A536B + A536E)
