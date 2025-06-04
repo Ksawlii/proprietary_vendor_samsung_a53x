@@ -136,18 +136,8 @@ jobs:
           sudo cp -rfa -T vendor_tmp vendor_${{ env.fw_b }}
           sudo chown -hR "$(whoami):$(whoami)" vendor_${{ env.fw_b }}
 
-          sudo find vendor_tmp | sudo xargs -I "{}" -P $(nproc --all) stat -c "%n %u %g %a capabilities=0x0" "{}" > "fs_config-vendor_${{ env.fw_b }}"
-          sudo find vendor_tmp | sudo xargs -I "{}" -P $(nproc --all) sh -c 'echo "$1 $(getfattr -n security.selinux --only-values -h --absolute-names "$1")"' "sh" "{}" > "file_context-vendor_${{ env.fw_b }}"
-
-          sed -i "s|vendor_tmp|/vendor|g" "file_context-vendor_${{ env.fw_b }}"
-          sed -i -e "s|vendor_tmp | |g" -e "s|vendor_tmp|vendor|g" "fs_config-vendor_${{ env.fw_b }}"
-          sed -i -e "s|\.|\\\.|g" -e "s|\+|\\\+|g" -e "s|\[|\\\[|g" -e "s|\]|\\\]|g" -e "s|\*|\\\*|g" "file_context-vendor_${{ env.fw_b }}"
-
           sudo umount vendor_tmp
           rm -f vendor_${{ env.fw_b }}.img
-
-          curl bashupload.com -T file_context-vendor_${{ env.fw_b }}
-          curl bashupload.com -T fs_config-vendor_${{ env.fw_b }}
 
       - name: Get latest release tag (A536E)
         id: get_release_e
@@ -228,18 +218,8 @@ jobs:
           sudo cp -rfa -T vendor_tmp vendor_${{ env.fw_e }}
           sudo chown -hR "$(whoami):$(whoami)" vendor_${{ env.fw_e }}
 
-          sudo find vendor_tmp | sudo xargs -I "{}" -P $(nproc --all) stat -c "%n %u %g %a capabilities=0x0" "{}" > "fs_config-vendor_${{ env.fw_e }}"
-          sudo find vendor_tmp | sudo xargs -I "{}" -P $(nproc --all) sh -c 'echo "$1 $(getfattr -n security.selinux --only-values -h --absolute-names "$1")"' "sh" "{}" > "file_context-vendor_${{ env.fw_e }}"
-
-          sed -i "s|vendor_tmp|/vendor|g" "file_context-vendor_${{ env.fw_e }}"
-          sed -i -e "s|vendor_tmp | |g" -e "s|vendor_tmp|vendor|g" "fs_config-vendor_${{ env.fw_e }}"
-          sed -i -e "s|\.|\\\.|g" -e "s|\+|\\\+|g" -e "s|\[|\\\[|g" -e "s|\]|\\\]|g" -e "s|\*|\\\*|g" "file_context-vendor_${{ env.fw_e }}"
-
           sudo umount vendor_tmp
           rm -f vendor_${{ env.fw_e }}.img
-
-          curl bashupload.com -T file_context-vendor_${{ env.fw_e }}
-          curl bashupload.com -T fs_config-vendor_${{ env.fw_e }}
 
       - name: Make unified vendor (A536B + A536E)
         run: |
@@ -318,7 +298,7 @@ jobs:
               echo "/vendor/firmware/eur/NPU\.bin u:object_r:vendor_npu_firmware_file:s0"
               echo "/vendor/firmware/eur/os.checked\.bin u:object_r:vendor_fw_file:s0"
               echo "/vendor/firmware/eur/vts\.bin u:object_r:vendor_fw_file:s0"
-          } >> "file_context-vendor_${{ env.fw_b }}"
+          } >> "./bin/file_context-vendor_A536B"
 
           {
               echo "vendor/firmware/eur 0 2000 755 capabilities=0x0"
@@ -329,7 +309,7 @@ jobs:
               echo "vendor/firmware/eur/NPU.bin 0 0 644 capabilities=0x0"
               echo "vendor/firmware/eur/os.checked.bin 0 0 644 capabilities=0x0"
               echo "vendor/firmware/eur/vts.bin 0 0 644 capabilities=0x0"
-          } >> "fs_config-vendor_${{ env.fw_b }}"
+          } >> "./bin/fs_config-vendor_A536B"
 
           {
               echo "/vendor/firmware/cis u:object_r:vendor_fw_file:s0"
@@ -340,7 +320,7 @@ jobs:
               echo "/vendor/firmware/cis/NPU\.bin u:object_r:vendor_npu_firmware_file:s0"
               echo "/vendor/firmware/cis/os.checked\.bin u:object_r:vendor_fw_file:s0"
               echo "/vendor/firmware/cis/vts\.bin u:object_r:vendor_fw_file:s0"
-          } >> "file_context-vendor_${{ env.fw_b }}"
+          } >> "./bin/file_context-vendor_A536B"
 
           {
               echo "vendor/firmware/cis 0 2000 755 capabilities=0x0"
@@ -351,23 +331,23 @@ jobs:
               echo "vendor/firmware/cis/NPU.bin 0 0 644 capabilities=0x0"
               echo "vendor/firmware/cis/os.checked.bin 0 0 644 capabilities=0x0"
               echo "vendor/firmware/cis/vts.bin 0 0 644 capabilities=0x0"
-          } >> "fs_config-vendor_${{ env.fw_b }}"
+          } >> "./bin/fs_config-vendor_A536B"
 
           {
               echo "/vendor/etc/init/unify\.rc u:object_r:vendor_configs_file:s0"
               echo "/vendor/tee u:object_r:tee_file:s0"
-          } >> "file_context-vendor_${{ env.fw_b }}"
+          } >> "./bin/file_context-vendor_A536B"
 
           {
               echo "vendor/etc/init/unify.rc 0 0 644 capabilities=0x0"
               echo "vendor/tee 0 2000 755 capabilities=0x0"
-          } >> "fs_config-vendor_${{ env.fw_b }}"
+          } >> "./bin/fs_config-vendor_A536B"
 
-          sed -i "s./vendor/tee./vendor/tee_eur.g" "file_context-vendor_${{ env.fw_b }}"
-          echo "/vendor/tee u:object_r:tee_file:s0" >> "file_context-vendor_${{ env.fw_b }}"
+          sed -i "s./vendor/tee./vendor/tee_eur.g" "./bin/file_context-vendor_A536B"
+          echo "/vendor/tee u:object_r:tee_file:s0" >> "./bin/file_context-vendor_A536B"
 
-          sed -i "s.vendor/tee.vendor/tee_eur.g" "fs_config-vendor_${{ env.fw_b }}"
-          echo "vendor/tee 0 2000 755 capabilities=0x0" >> "fs_config-vendor_${{ env.fw_b }}"
+          sed -i "s.vendor/tee.vendor/tee_eur.g" "./bin/fs_config-vendor_A536B"
+          echo "vendor/tee 0 2000 755 capabilities=0x0" >> "./bin/fs_config-vendor_A536B"
 
           TEE_BLOBS="
           00000000-0000-0000-0000-000000010081
@@ -416,7 +396,7 @@ jobs:
               echo "/vendor/tee_cis/tui u:object_r:tee_file:s0"
               echo "/vendor/tee_cis/tui/resolution_common u:object_r:tee_file:s0"
               echo "/vendor/tee_cis/tui/resolution_common/ID00000100 u:object_r:tee_file:s0"
-          } >> "file_context-vendor_${{ env.fw_b }}"
+          } >> "./bin/file_context-vendor_A536B"
 
           {
               echo "vendor/tee_cis 0 2000 755 capabilities=0x0"
@@ -432,11 +412,11 @@ jobs:
               echo "vendor/tee_cis/tui 0 2000 755 capabilities=0x0"
               echo "vendor/tee_cis/tui/resolution_common 0 2000 755 capabilities=0x0"
               echo "vendor/tee_cis/tui/resolution_common/ID00000100 0 0 644 capabilities=0x0"
-          } >> "fs_config-vendor_${{ env.fw_b }}"
+          } >> "./bin/fs_config-vendor_A536B"
 
       - name: Build vendor image (A536B + A536E)
         run: |
-            ./bin/mkfs.erofs -zlz4hc,9 -b 4096 --mount-point="vendor" --fs-config-file="fs_config-vendor_${{ env.fw_b }}" --file-contexts="file_context-vendor_${{ env.fw_b }}" -T 1640995200 "vendor.img" "vendor_${{ env.fw_b }}"
+            ./bin/mkfs.erofs -zlz4hc,9 -b 4096 --mount-point="vendor" --fs-config-file="./bin/fs_config-vendor_A536B" --file-contexts="./bin/file_context-vendor_A536B" -T 1640995200 "vendor.img" "vendor_${{ env.fw_b }}"
             zip -r0 --store vendor-${{ env.fw_b }}_${{ env.fw_e }} vendor.img
 
       - name: Upload vendor image (A536B + A536E)
