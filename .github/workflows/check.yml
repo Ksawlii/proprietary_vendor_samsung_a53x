@@ -14,6 +14,11 @@ jobs:
           - model: "SM-A536E"
             csc: "TPA"
             omc: "TPA"
+            imei: "357518816398424"
+          - model: "SM-A536B"
+            csc: "EUX"
+            omc: "EUX"
+            imei: "350498057492003"
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -58,8 +63,7 @@ jobs:
       - name: Fetch firmware
         if: env.need_update == 1
         run: |
-          imei="357518816398424"
-          samfirm -m ${{ matrix.model }} -r ${{ matrix.csc }} -i $imei
+          samfirm -m ${{ matrix.model }} -r ${{ matrix.csc }} -i ${{ matrix.imei }}
 
       - name: Get path of files
         if: env.need_update == 1
