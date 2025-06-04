@@ -349,7 +349,7 @@ jobs:
           sed -i "s.vendor/tee.vendor/tee_eur.g" "./bin/fs_config-vendor_A536B"
           echo "vendor/tee 0 2000 755 capabilities=0x0" >> "./bin/fs_config-vendor_A536B"
 
-          TEE_BLOBS="
+          TEE_BLOBS=(
           00000000-0000-0000-0000-000000010081
           00000000-0000-0000-0000-000000020081
           00000000-0000-0000-0000-000000534b4d
@@ -380,11 +380,11 @@ jobs:
           00000000-0000-0000-0000-6b6e78677564
           00000000-0000-0000-0000-6d706f667376
           00000000-0000-0000-0000-6d73745f5441
-          "
+          )
 
           {
               echo "/vendor/tee_cis u:object_r:tee_file:s0"
-              for b in "$TEE_BLOBS"; do
+              for b in "${TEE_BLOBS[@]}"; do
                   echo "/vendor/tee_cis/$b u:object_r:tee_file:s0"
               done
               echo "/vendor/tee_cis/driver u:object_r:tee_file:s0"
@@ -400,7 +400,7 @@ jobs:
 
           {
               echo "vendor/tee_cis 0 2000 755 capabilities=0x0"
-              for b in "$TEE_BLOBS"; do
+              for b in "${TEE_BLOBS[@]}"; do
                   echo "vendor/tee_cis/$b 0 0 644 capabilities=0x0"
               done
               echo "vendor/tee_cis/driver 0 2000 755 capabilities=0x0"
