@@ -76,14 +76,14 @@ jobs:
               fw_b="$(cat current.${{ matrix.model_b }}_${{ matrix.omc_b }})"
               match=false
 
-              while read -r keyword; do
+              IFS='/' read -ra keywords <<< "$fw_b"
+              for keyword in "${keywords[@]}"; do
                   prefix="${keyword%%/*}"
-    
                   if [[ "$tag" == *"$prefix"* ]]; then
                       match=true
                       break
                   fi
-              done < "$fw_b"
+              done
           else
               match=false
           fi
@@ -94,7 +94,7 @@ jobs:
         if: steps.check_keywords_b.outputs.match_b == 'true'
         run: |
           echo "fw_b=$(cat current.${{ matrix.model_b }}_${{ matrix.omc_b }})" >> $GITHUB_ENV
-          vendor="https://github.com/${{ github.repository }}/releases/${{ env.fw_b }}_vendor.zip
+          vendor="https://github.com/${{ github.repository }}/releases/${{ env.fw_b }}_vendor.zip"
 
           wget "$vendor"
           unzip "${{ env.fw_b }}_vendor.zip"
@@ -160,14 +160,14 @@ jobs:
               fw_b="$(cat current.${{ matrix.model_e }}_${{ matrix.omc_e }})"
               match=false
 
-              while read -r keyword; do
+              IFS='/' read -ra keywords <<< "$fw_e"
+              for keyword in "${keywords[@]}"; do
                   prefix="${keyword%%/*}"
-    
                   if [[ "$tag" == *"$prefix"* ]]; then
                       match=true
                       break
                   fi
-              done < "$fw_e"
+              done
           else
               match=false
           fi
@@ -178,7 +178,7 @@ jobs:
         if: steps.check_keywords_b.outputs.match_e == 'true'
         run: |
           echo "fw_e=$(cat current.${{ matrix.model_e }}_${{ matrix.omc_e }})" >> $GITHUB_ENV
-          vendor="https://github.com/${{ github.repository }}/releases/${{ env.fw_e }}_vendor.zip
+          vendor="https://github.com/${{ github.repository }}/releases/${{ env.fw_e }}_vendor.zip"
 
           wget "$vendor"
           unzip "${{ env.fw_e }}_vendor.zip"
